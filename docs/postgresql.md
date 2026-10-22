@@ -26,7 +26,8 @@ try {
   await migrate(pool); // use a dedicated migration role in production
   const result = await ingestPage({ pool, rpc: createRpc(config.rpcUrl), config });
   console.log(result);
-  console.log(await listEvents(pool, { network: config.network, contractId: config.contractId }));
+  const { events, nextCursor } = await listEvents(pool, { network: config.network, contractId: config.contractId });
+  console.log(events, nextCursor);
 } finally {
   await pool.end();
 }
@@ -38,9 +39,9 @@ try {
 - RPC requests occur outside the transaction to avoid holding database locks during network requests.
 - Event IDs are unique within a network/contract pair. Writes are idempotent.
 - A crashed transaction rolls back both events and cursor.
-- Query pagination uses an exclusive `afterLedger`; for multiple events in the same ledger, use a composite (ledger, event ID) cursor before relying on this query for complete pagination.
+- Query pagination uses a composite exclusive `(afterLedger, afterEventId)` cursor so events sharing a ledger are not skipped. Pass the returned `nextCursor` object into the next `listEvents` call. `null` means a final short page (or potentially an exactly full last page followed by an empty request).
 - There is no built-in scheduler, connection pooling implementation, backoff strategy, or HTTP API. This module accepts a compatible externally managed pool.
-- Database integration tests against a real PostgreSQL instance remain outstanding. Current tests use a mock pool.
+- GitHub Actions runs the PostgreSQL integration suite against PostgreSQL 16, in addition to mocked unit tests. End-to-end live Stellar RPC validation is still outstanding.
 - PostgreSQL must run over an authenticated, encrypted connection in real deployments.
 
 Stellar reference: https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getEvents
