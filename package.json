@@ -1,0 +1,1 @@
+{"name":"@stellar-devguard/monitor","version":"0.1.0","private":true,"type":"module","description":"Checkpointed Stellar Soroban event ingester","engines":{"node":">=20"},"scripts":{"test":"node --test","check":"node --check src/ingester.js && node --check src/cli.js","start":"node src/cli.js"},"license":"MIT"}
