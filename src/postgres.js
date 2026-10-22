@@ -78,13 +78,22 @@ export async function ingestPage({ pool, rpc, config, clock = () => new Date() }
   } finally { client.release(); }
 }
 
-export async function listEvents(pool, { network, contractId, afterLedger = 0, limit = 100 }) {
+/** Stable keyset pagination across events sharing a ledger.
+ * nextCursor is null only when fewer than 'limit' records were returned.
+ */
+export async function listEvents(pool, { network, contractId, afterLedger = 0, afterEventId = '', limit = 100 }) {
   if (!Object.hasOwn(NETWORKS, network) || !/^C[A-Z2-7]{55}$/.test(contractId))
     throw new TypeError('Invalid network or contract ID');
   if (!Number.isSafeInteger(afterLedger) || afterLedger < 0 ||
-      !Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new TypeError('Invalid pagination');
+      typeof afterEventId !== 'string' || afterEventId.length > 200 ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 500)
+    throw new TypeError('Invalid pagination');
   const result = await pool.query(
-    'SELECT payload FROM devguard_events WHERE network=$1 AND contract_id=$2 AND ledger>$3 ORDER BY ledger, event_id LIMIT $4',
-    [network, contractId, afterLedger, limit]);
-  return result.rows.map(row => row.payload);
+    'SELECT ledger, event_id, payload FROM devguard_events WHERE network=$1 AND contract_id=$2 AND (ledger, event_id) > ($3::bigint, $4::text) ORDER BY ledger, event_id LIMIT $5',
+    [network, contractId, afterLedger, afterEventId, limit]);
+  const events = result.rows.map(row => row.payload);
+  const last = result.rows.at(-1);
+  const nextCursor = result.rows.length === limit && last
+    ? { afterLedger: Number(last.ledger), afterEventId: last.event_id } : null;
+  return { events, nextCursor };
 }
