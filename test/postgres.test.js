@@ -72,11 +72,35 @@ test('unexpected events rejected before transaction', async () => {
 test('bounded parameterized event lookup', async () => {
   const db = pool();
   await listEvents(db, { network: 'testnet', contractId: config.contractId, limit: 10 });
-  assert.deepEqual(db.calls[0].params, ['testnet', config.contractId, 0, 10]);
+  assert.deepEqual(db.calls[0].params, ['testnet', config.contractId, 0, '', 10]);
   await assert.rejects(listEvents(db, { network: 'testnet', contractId: config.contractId, limit: 1000 }), /pagination/);
 });
 test('schema migration sends static SQL', async () => {
   const db = pool();
   await migrate(db);
   assert.equal(db.calls[0].sql, SCHEMA);
+});
+
+test('composite event cursor preserves events in the same ledger', async () => {
+  const calls = [];
+  const records = [
+    { ledger: '100', event_id: 'a', payload: { id: 'a' } },
+    { ledger: '100', event_id: 'b', payload: { id: 'b' } },
+    { ledger: '100', event_id: 'c', payload: { id: 'c' } },
+    { ledger: '101', event_id: 'a', payload: { id: 'd' } }
+  ];
+  const db = { query: async (_sql, params) => {
+    calls.push(params);
+    const rows = records.filter(r =>
+      BigInt(r.ledger) > BigInt(params[2]) ||
+      (BigInt(r.ledger) === BigInt(params[2]) && r.event_id > params[3]))
+      .slice(0, params[4]);
+    return { rows };
+  }};
+  const first = await listEvents(db, { network: 'testnet', contractId: config.contractId, limit: 2 });
+  assert.deepEqual(first.events.map(e => e.id), ['a', 'b']);
+  assert.deepEqual(first.nextCursor, { afterLedger: 100, afterEventId: 'b' });
+  const second = await listEvents(db, { network: 'testnet', contractId: config.contractId,
+    ...first.nextCursor, limit: 2 });
+  assert.deepEqual(second.events.map(e => e.id), ['c', 'd']);
 });
