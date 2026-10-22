@@ -9,8 +9,9 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/ingester.js && node --check src/cli.js && node --check src/postgres.js && node --check src/api.js && node --check src/worker.js",
-    "start": "node src/cli.js"
+    "check": "node --check src/ingester.js && node --check src/cli.js && node --check src/postgres.js && node --check src/api.js && node --check src/worker.js && node --check src/service.js",
+    "start": "node src/cli.js",
+    "start:service": "node src/service.js"
   },
   "license": "MIT"
 }
